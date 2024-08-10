@@ -1,4 +1,5 @@
 let cursorX = window.innerWidth; // Initialize to full width for full redacted view
+let ticking = false;
 
 function isMobileOrTablet() {
     return window.innerWidth <= 1024;
@@ -13,22 +14,27 @@ function updateClipPath(percentage) {
 }
 
 function animate() {
-    const screenWidth = window.innerWidth;
-    const percentage = (cursorX / screenWidth) * 100;
-
-    updateClipPath(percentage);
-
-    requestAnimationFrame(animate);
+    if (!ticking) {
+        requestAnimationFrame(() => {
+            const screenWidth = window.innerWidth;
+            const percentage = (cursorX / screenWidth) * 100;
+            updateClipPath(percentage);
+            ticking = false;
+        });
+        ticking = true;
+    }
 }
 
 function handleSlider() {
     const slider = document.getElementById('camera-slider');
     cursorX = (slider.value / 100) * window.innerWidth;
+    animate();
 }
 
 function handleMouseMove(event) {
     if (!isMobileOrTablet()) {
         cursorX = event.clientX;
+        animate();
     }
 }
 
@@ -38,6 +44,7 @@ function handleTouchMove(event) {
         const touch = event.touches[0];
         cursorX = touch.clientX;
         updateSlider(cursorX);
+        animate();
     }
 }
 
@@ -59,7 +66,7 @@ function handleResize() {
         sliderContainer.style.display = 'none';
         cursorX = window.innerWidth; // Set to full width for desktop as well
     }
-    updateClipPath((cursorX / window.innerWidth) * 100);
+    animate();
 }
 
 function initializeFullRedacted() {
@@ -75,11 +82,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const slider = document.getElementById('camera-slider');
     slider.addEventListener('input', handleSlider);
     
-    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousemove', handleMouseMove, { passive: true });
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('resize', handleResize);
     
     initializeFullRedacted(); // Initialize with full redacted view
     handleResize(); // Initial setup
-    requestAnimationFrame(animate);
 });
