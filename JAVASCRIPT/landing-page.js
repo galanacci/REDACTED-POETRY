@@ -1,91 +1,75 @@
-let cursorX = window.innerWidth; // Initialize to full width for full redacted view
-let ticking = false;
+const MOBILE_IMAGE_WIDTH_PERCENTAGE = 0.85;
+let cursorX, containerRect, isLandscape;
 
-function isMobileOrTablet() {
-    return window.innerWidth <= 1024;
-}
+const isMobileOrTablet = () => window.innerWidth <= 1024;
+const isLandscapeMode = () => window.innerWidth > window.innerHeight;
 
-function updateClipPath(percentage) {
-    const redacted = document.getElementById('redacted');
-    const unredacted = document.getElementById('unredacted');
+const updateClipPath = (percentage) => {
+    const clipPath = `polygon(0 0, ${percentage}% 0, ${percentage}% 100%, 0% 100%)`;
+    document.getElementById('redacted').style.clipPath = clipPath;
+    document.getElementById('unredacted').style.clipPath = `polygon(${percentage}% 0, 100% 0, 100% 100%, ${percentage}% 100%)`;
+};
 
-    redacted.style.clipPath = `polygon(0 0, ${percentage}% 0, ${percentage}% 100%, 0% 100%)`;
-    unredacted.style.clipPath = `polygon(${percentage}% 0, 100% 0, 100% 100%, ${percentage}% 100%)`;
-}
+const animate = () => {
+    const width = isMobileOrTablet() ? containerRect.width * MOBILE_IMAGE_WIDTH_PERCENTAGE : containerRect.width;
+    const percentage = Math.min(100, Math.max(0, (cursorX / width) * 100));
+    updateClipPath(percentage);
+};
 
-function animate() {
-    if (!ticking) {
-        requestAnimationFrame(() => {
-            const screenWidth = window.innerWidth;
-            const percentage = (cursorX / screenWidth) * 100;
-            updateClipPath(percentage);
-            ticking = false;
-        });
-        ticking = true;
+const updateCursorPosition = (clientX, isTouchEvent = false) => {
+    if (isMobileOrTablet() && isTouchEvent) {
+        const imageWidth = containerRect.width * MOBILE_IMAGE_WIDTH_PERCENTAGE;
+        const imageLeft = (containerRect.width - imageWidth) / 2;
+        cursorX = Math.max(0, Math.min(clientX - containerRect.left - imageLeft, imageWidth));
+    } else if (!isMobileOrTablet()) {
+        cursorX = Math.max(0, Math.min(clientX - containerRect.left, containerRect.width));
     }
-}
-
-function handleSlider() {
-    const slider = document.getElementById('camera-slider');
-    cursorX = (slider.value / 100) * window.innerWidth;
+    updateSlider();
     animate();
-}
+};
 
-function handleMouseMove(event) {
-    if (!isMobileOrTablet()) {
-        cursorX = event.clientX;
-        animate();
-    }
-}
+const updateSlider = () => {
+    const width = isMobileOrTablet() ? containerRect.width * MOBILE_IMAGE_WIDTH_PERCENTAGE : containerRect.width;
+    const percentage = (cursorX / width) * 100;
+    document.getElementById('camera-slider').value = Math.min(100, Math.max(0, percentage));
+};
 
-function handleTouchMove(event) {
-    if (isMobileOrTablet()) {
-        event.preventDefault();
-        const touch = event.touches[0];
-        cursorX = touch.clientX;
-        updateSlider(cursorX);
-        animate();
-    }
-}
-
-function updateSlider(cursorX) {
-    const slider = document.getElementById('camera-slider');
-    const percentage = (cursorX / window.innerWidth) * 100;
-    slider.value = percentage;
-}
-
-function handleResize() {
-    const slider = document.getElementById('camera-slider');
+const handleResize = () => {
+    containerRect = document.getElementById('container').getBoundingClientRect();
+    isLandscape = isLandscapeMode();
     const sliderContainer = document.getElementById('camera-slider-container');
-    if (isMobileOrTablet()) {
-        sliderContainer.style.display = 'block';
-        // Set slider to 100 for full redacted view
-        slider.value = 100;
-        cursorX = window.innerWidth;
-    } else {
-        sliderContainer.style.display = 'none';
-        cursorX = window.innerWidth; // Set to full width for desktop as well
-    }
+    sliderContainer.style.display = isMobileOrTablet() ? 'block' : 'none';
+    cursorX = isMobileOrTablet() ? containerRect.width * MOBILE_IMAGE_WIDTH_PERCENTAGE : containerRect.width;
+    updateSlider();
     animate();
-}
+};
 
-function initializeFullRedacted() {
-    cursorX = window.innerWidth;
-    const slider = document.getElementById('camera-slider');
-    if (slider) {
-        slider.value = 100; // Set slider to maximum
-    }
-    updateClipPath(100); // Update clip path to show full redacted view
-}
+const initializeFullRedacted = () => {
+    handleResize();
+    updateClipPath(100);
+};
 
 document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('container');
     const slider = document.getElementById('camera-slider');
-    slider.addEventListener('input', handleSlider);
-    
-    document.addEventListener('mousemove', handleMouseMove, { passive: true });
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    slider.addEventListener('input', () => {
+        const width = isMobileOrTablet() ? containerRect.width * MOBILE_IMAGE_WIDTH_PERCENTAGE : containerRect.width;
+        cursorX = (slider.value / 100) * width;
+        animate();
+    });
+
+    container.addEventListener('mousemove', (e) => !isMobileOrTablet() && updateCursorPosition(e.clientX));
+    container.addEventListener('touchstart', (e) => isMobileOrTablet() && updateCursorPosition(e.touches[0].clientX, true));
+    container.addEventListener('touchmove', (e) => {
+        if (isMobileOrTablet()) {
+            e.preventDefault();
+            updateCursorPosition(e.touches[0].clientX, true);
+        }
+    });
+
     window.addEventListener('resize', handleResize);
-    
-    initializeFullRedacted(); // Initialize with full redacted view
-    handleResize(); // Initial setup
+    window.addEventListener('orientationchange', handleResize);
+
+    initializeFullRedacted();
 });
